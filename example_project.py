@@ -16,8 +16,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
-from rti_lib.project import RTIProject, XPProcessor, U1Remote, U2Remote
-from rti_lib.bml    import BMLFile
+from rti_lib import RTIProject, XPProcessor, U1Remote, U2Remote, BMLFile
 
 # ── Buttons / macros to create ──────────────────────────────────────────────
 SOURCES = [

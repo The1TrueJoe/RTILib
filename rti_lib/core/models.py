@@ -12,12 +12,6 @@ Controller model names (as stored in RTI Data Directory V3):
   "XP-6"  : 6 IR outputs
   "XP-8"  : 8 Multi-Purpose IR Outputs
 
-USB transport (WinUSB):
-  VID = 0x13BD
-  PIDs = 0x0020, 0x1022 through 0x103F
-  Device Interface GUID = {b0b650d9-8169-4343-89df-ca55cef25059}
-  Target file on device: \\IPSM\\remotev2.dat
-  Cancel event name: RTIUpgradeCancelEvent
 """
 
 # ---- Device type bytes ----
@@ -57,14 +51,6 @@ U2_DISPLAY_BPP    = 1   # 1-bit B&W
 T2_PLUS_DISPLAY_WIDTH  = 64
 T2_PLUS_DISPLAY_HEIGHT = 128
 T2_PLUS_DISPLAY_BPP    = 1
-
-# ---- USB constants ----
-
-RTI_USB_VID = 0x13BD
-RTI_USB_PIDS = [0x0020] + list(range(0x1022, 0x1040))
-RTI_DEVICE_INTERFACE_GUID = '{b0b650d9-8169-4343-89df-ca55cef25059}'
-RTI_UPLOAD_TARGET_PATH = r'\IPSM\remotev2.dat'
-RTI_CANCEL_EVENT_NAME = 'RTIUpgradeCancelEvent'
 
 # ---- Stream names (within RTI OLE2 CFB) ----
 
