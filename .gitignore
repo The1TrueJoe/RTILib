@@ -20,3 +20,8 @@ Thumbs.db
 # Editor
 .vscode/
 *.swp
+
+# Testing folders
+archive/
+testing/
+driver/
