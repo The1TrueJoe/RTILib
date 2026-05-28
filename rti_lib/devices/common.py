@@ -1,0 +1,159 @@
+"""
+rti_lib/devices/common.py — TLV helpers shared across device types.
+
+These builders are used by both U1 and U2 remotes.  The XP processor also
+relies on encode_global_button_group indirectly (through the remote classes).
+
+Wire format recap (from core/tlv.py)
+-------------------------------------
+Every node:  TAG(1) TYPE(1) [LENGTH] VALUE
+  0x20 = BYTE        VALUE = 1 byte
+  0x40 = U16         VALUE = 2 bytes LE
+  0x60 = I32         VALUE = 4 bytes LE signed
+  0x80 = BLOB        LENGTH = 1 byte, VALUE = LENGTH bytes
+  0xA0 = VARSTR      LENGTH = 2 bytes LE, VALUE = raw bytes (usually UTF-16LE)
+  0xC0 = CONTAINER   LENGTH = 4 bytes LE, VALUE = nested TLV bytes
+  0xE0 = GUID        VALUE = 16 bytes fixed
+Terminator: FF FF
+"""
+
+import struct
+from ..core import tlv
+
+# ---- Macro-reference blob -----------------------------------------------
+# When a button on a U1 or U2 references an XP macro, a 8-byte blob is
+# embedded in the commands container:
+#   [0:2]  macro sequence number (LE uint16)
+#   [2:8]  fixed suffix below (observed in Test2/Test3.rti)
+MACRO_REF_SUFFIX = bytes([0xFF, 0x00, 0x00, 0x00, 0x08, 0x07])
+
+
+def encode_macro_ref_container(macro_seq_num: int) -> bytes:
+    """
+    Build the 23-byte commands container that links a remote button to an
+    XP macro by sequence number.
+
+    The container holds a single BLOB (tag=0x17) whose value is the 2-byte
+    macro sequence number followed by MACRO_REF_SUFFIX.
+
+    Parameters
+    ----------
+    macro_seq_num : 1-based sequence number returned by XPProcessor.add_macro()
+    """
+    blob_data = struct.pack('<H', macro_seq_num) + MACRO_REF_SUFFIX
+    content = (
+        tlv.encode_u16(0x01, 1) +
+        tlv.encode_blob(0x17, blob_data) +
+        tlv.TERMINATOR
+    )
+    return tlv.encode_container(0x01, content)
+
+
+def _encode_button_base(btn_idx: int, configured: bool = False,
+                        label: str = '') -> bytes:
+    """
+    Encode the 46-byte base TLV block shared by every button type (U1 and U2).
+
+    btn_idx    : hardware index (e.g. 128–162 on U2; 128+ on U1)
+    configured : True  → byte tag=02 = 0x00 (button has an action)
+                 False → byte tag=02 = 0xFF (unconfigured)
+    label      : button display label (VARSTR tag=04)
+    """
+    return (
+        tlv.encode_i32(0x01, 254) +
+        tlv.encode_i32(0x02, btn_idx) +
+        tlv.encode_i32(0x03, 0) +
+        tlv.encode_byte(0x02, 0x00 if configured else 0xFF) +
+        tlv.encode_byte(0x03, 0) +
+        tlv.encode_byte(0x04, 0) +
+        tlv.encode_byte(0x05, 0) +
+        tlv.encode_byte(0x06, 0) +
+        tlv.encode_i32(0x0E, -1) +
+        tlv.encode_byte(0x0E, 1) +
+        tlv.encode_varstr(0x04, label)
+    )
+
+
+def _encode_group_header(name: str = '') -> bytes:
+    """
+    Encode the 6-node fixed header that opens every button/macro group container.
+
+    The header always contains:
+      BYTE  tag=01 = 2     (group type flag)
+      BYTE  tag=02 = 0     (reserved)
+      VARSTR tag=01 = name (group display name, usually empty)
+      I32   tag=01 = 0x00FFFFFF  (colour — white background)
+      BYTE  tag=03 = 1     (visible flag)
+      BYTE  tag=04 = 0     (reserved)
+    """
+    return (
+        tlv.encode_byte(0x01, 2) +
+        tlv.encode_byte(0x02, 0) +
+        tlv.encode_varstr(0x01, name) +
+        tlv.encode_i32(0x01, 0x00FFFFFF) +
+        tlv.encode_byte(0x03, 1) +
+        tlv.encode_byte(0x04, 0)
+    )
+
+
+def encode_button_row(buttons_bytes: list, row_name: str = '') -> bytes:
+    """
+    Wrap a list of button byte-blobs in a TAG=01 CONTAINER (local button row).
+
+    Used for page-local (non-global) button rows.
+    """
+    content = _encode_group_header(row_name) + b''.join(buttons_bytes) + tlv.TERMINATOR
+    return tlv.encode_container(0x01, content)
+
+
+def encode_global_button_group(buttons_bytes: list) -> bytes:
+    """
+    Wrap a list of button byte-blobs in a TAG=02 CONTAINER (global button group).
+
+    The TAG=02 container is the top-level wrapper that Integration Designer
+    reads to discover all configured buttons.  On U2 remotes this container
+    holds both the shortcut-cell records and the physical hardware-button
+    records.  On U1 remotes it holds only the hardware-button records.
+    """
+    content = _encode_group_header() + b''.join(buttons_bytes) + tlv.TERMINATOR
+    return tlv.encode_container(0x02, content)
+
+
+def encode_profile(rows) -> bytes:
+    """
+    Encode a base-stream profile table (list of decoded TLV records) to bytes.
+
+    Each row is a tuple:  (kind, tag, value)
+      kind = 'byte' | 'u16' | 'i32' | 'blob' | 'guid' | 'varstr_raw' | 'container_raw'
+      tag  = integer tag byte
+      value:
+        byte/u16/i32       → int
+        blob/guid          → hex string  (decoded with bytes.fromhex)
+        varstr_raw         → hex string  (raw pre-encoded payload, 2-byte len prefix)
+        container_raw      → hex string  (raw pre-encoded payload, 4-byte len prefix)
+
+    These tables are auto-generated by _regen_profiles.py from a reference
+    .rti file using the TLV decoder in core/tlv.py.
+    """
+    def _raw(h):
+        return bytes.fromhex(h)
+
+    parts = []
+    for kind, tag, value in rows:
+        if kind == 'byte':
+            parts.append(tlv.encode_byte(tag, value))
+        elif kind == 'u16':
+            parts.append(tlv.encode_u16(tag, value))
+        elif kind == 'i32':
+            parts.append(tlv.encode_i32(tag, value))
+        elif kind == 'blob':
+            parts.append(tlv.encode_blob(tag, _raw(value)))
+        elif kind == 'guid':
+            parts.append(tlv.encode_guid(tag, _raw(value)))
+        elif kind == 'varstr_raw':
+            parts.append(tlv.encode_varstr_raw(tag, _raw(value)))
+        elif kind == 'container_raw':
+            parts.append(tlv.encode_container(tag, _raw(value)))
+        else:
+            raise ValueError(f'unknown profile row kind: {kind!r}')
+    return b''.join(parts)
