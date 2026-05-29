@@ -20,12 +20,13 @@ Usage::
 """
 
 import os
-from ..core import cfb_writer
-from ..core.models import DEVICE_TYPE_U1, DEVICE_TYPE_U2, DEVICE_TYPE_CONTROLLER
-from ..devices.xp import XPProcessor
-from ..devices.u1 import U1Remote
-from ..devices.u2 import U2Remote
-from .metadata import (
+from rti_lib.core import cfb_writer
+from rti_lib.core.models import DEVICE_TYPE_U1, DEVICE_TYPE_U2, DEVICE_TYPE_CONTROLLER, DEVICE_TYPE_T2I
+from rti_lib.devices.xp import XPProcessor
+from rti_lib.devices.u1 import U1Remote
+from rti_lib.devices.u2 import U2Remote
+from rti_lib.devices.t2i import T2iRemote
+from rti_lib.project.metadata import (
     build_job_info_stream,
     build_variable_ids_stream,
     build_directory_stream,
@@ -91,6 +92,9 @@ class RTIProject:
             elif isinstance(dev, U2Remote):
                 dir_entries.append(
                     (DEVICE_TYPE_U2, _MANUFACTURER, dev.display_name))
+            elif isinstance(dev, T2iRemote):
+                dir_entries.append(
+                    (DEVICE_TYPE_T2I, _MANUFACTURER, dev.display_name))
 
         # ---- metadata streams --------------------------------------------
         # Job Info: GPS/timezone data decoded from reference project.

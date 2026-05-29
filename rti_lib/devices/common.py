@@ -18,7 +18,7 @@ Terminator: FF FF
 """
 
 import struct
-from ..core import tlv
+from rti_lib.core import tlv
 
 # ---- Macro-reference blob -----------------------------------------------
 # When a button on a U1 or U2 references an XP macro, a 8-byte blob is

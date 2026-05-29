@@ -45,7 +45,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, Optional
 
-from ...core import cfb, tlv
+from rti_lib.core import cfb, tlv
 
 # --------------------------------------------------------------------- #
 # GUID encoding helper                                                   #

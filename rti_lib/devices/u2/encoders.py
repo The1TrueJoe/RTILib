@@ -54,8 +54,8 @@ Bitmap container (TAG=02 CONTAINER):
 import math
 import struct
 import zlib
-from ...core import tlv
-from ..common import _encode_button_base, encode_macro_ref_container
+from rti_lib.core import tlv
+from rti_lib.devices.common import _encode_button_base, encode_macro_ref_container
 
 # Suffix appended to the 2-byte macro seq_num inside comment containers.
 # Observed in Test3.rti; purpose is unknown.

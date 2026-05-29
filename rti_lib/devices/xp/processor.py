@@ -13,8 +13,8 @@ Typical usage::
 """
 
 from typing import Dict, List, Optional
-from ...core import tlv
-from .encoders import (
+from rti_lib.core import tlv
+from rti_lib.devices.xp.encoders import (
     encode_serial_command_tlv,
     encode_driver_command_tlv,
     encode_commands_container,
@@ -25,8 +25,8 @@ from .encoders import (
     DEVICE_HASH_DRIVER,
     SERIAL_SETTINGS_8N1,
 )
-from .stream_profile import build_xp6_base_stream
-from .driver import RTIDriver
+from rti_lib.devices.xp.stream_profile import build_xp6_base_stream
+from rti_lib.devices.xp.driver import RTIDriver
 
 
 class Macro:
@@ -151,7 +151,7 @@ class XPProcessor:
         Parameters
         ----------
         name         : macro display name (shown in Integration Designer)
-        serial       : raw bytes sent over serial  (e.g. ``b'src tv\\r\``)
+        serial       : raw bytes sent over serial  (e.g. ``b'src tv\\r'``)
         baud         : baud rate in bps (default 9600)
         port         : serial port index on the processor (0-based)
         settings     : serial settings byte (0x88 = 8-N-1, see SERIAL_SETTINGS_8N1)

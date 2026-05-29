@@ -1,11 +1,12 @@
 """
 RTI Device models, constants, and hardware definitions.
 
-Device type bytes (from reverse engineering RTI Data Directory V3 and stream headers):
+Device type bytes (from RTI Data Directory V3 and stream headers):
   0x07 = T2+    (2.4" B&W touchscreen handheld, confirmed from T2Sample.rti)
   0x11 = U1     (button-only handheld, confirmed from Test2.rti RTI Data Directory)
   0x1D = U2     (2.1" B&W 64x128px display handheld, confirmed from Test2.rti dir slot 2)
   0x31 = Controller/Processor (XP-3, XP-6, XP-8 — same category byte, model differentiates)
+  0x4B = T2i    (color touchscreen handheld, 240x320px, confirmed from Test4.rti dir slot 3)
 
 Controller model names (as stored in RTI Data Directory V3):
   "XP-3"  : 3 IR outputs (1 Multi-Purpose IR Output)
@@ -20,12 +21,14 @@ DEVICE_TYPE_T2_PLUS   = 0x07
 DEVICE_TYPE_U1        = 0x11
 DEVICE_TYPE_U2        = 0x1D
 DEVICE_TYPE_CONTROLLER = 0x31
+DEVICE_TYPE_T2I       = 0x4B
 
 DEVICE_TYPE_NAMES = {
     DEVICE_TYPE_T2_PLUS:   'T2+',
     DEVICE_TYPE_U1:        'U1',
     DEVICE_TYPE_U2:        'U2',
     DEVICE_TYPE_CONTROLLER: 'Controller',
+    DEVICE_TYPE_T2I:       'T2i',
 }
 
 # ---- Controller model strings ----

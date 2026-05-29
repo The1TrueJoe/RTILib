@@ -18,8 +18,8 @@ Button TLV structure (inside TAG=01 CONTAINER):
   FF FF  (terminator)
 """
 
-from ...core import tlv
-from ..common import _encode_button_base, encode_macro_ref_container
+from rti_lib.core import tlv
+from rti_lib.devices.common import _encode_button_base, encode_macro_ref_container
 
 
 def encode_u1_button_empty(btn_idx: int, label: str = '') -> bytes:

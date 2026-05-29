@@ -14,10 +14,10 @@ Typical usage::
 
 from dataclasses import dataclass
 from typing import List, Optional
-from ...core import tlv
-from ..common import encode_global_button_group
-from .encoders import encode_u1_button_empty, encode_u1_button_with_ref
-from .stream_profile import build_u1_base_stream
+from rti_lib.core import tlv
+from rti_lib.devices.common import encode_global_button_group
+from rti_lib.devices.u1.encoders import encode_u1_button_empty, encode_u1_button_with_ref
+from rti_lib.devices.u1.stream_profile import build_u1_base_stream
 
 
 @dataclass

@@ -12,9 +12,31 @@ Structure (351 TLV records):
 """
 
 import struct
-from ...core import tlv
+from rti_lib.core import tlv
+from rti_lib.core.fields import (
+    CFG_DEVICE_TYPE, CFG_POLLING_RATE, CFG_NTP_SYNC_INTERVAL,
+    CFG_UNKNOWN_04, CFG_PROTOCOL_VERSION, CFG_IS_PROCESSOR,
+    CFG_UNKNOWN_08, CFG_DEVICE_CATEGORY, CFG_UNKNOWN_27,
+    CFG_HAS_PHYS_BUTTONS, CFG_UNKNOWN_0C, CFG_UI_VERSION,
+    CFG_UNKNOWN_2C, CFG_UNKNOWN_0E, CFG_UNKNOWN_0F_B, CFG_UNKNOWN_11,
+    CFG_IDLE_TIMEOUT, CFG_UNKNOWN_13_B, CFG_BACKLIGHT_MAX,
+    CFG_BACKLIGHT_ON, CFG_BACKLIGHT_DIM, CFG_BACKLIGHT_OFF,
+    CFG_MOTION_ON, CFG_MOTION_DIM, CFG_MOTION_OFF,
+    CFG_KEYCLICK_VOL, CFG_KEYCLICK_ON, CFG_VIBRATION_MS,
+    CFG_HAS_TOUCHSCREEN, CFG_UNKNOWN_2B, CFG_RF_CHANNEL,
+    CFG_RF_CHANNEL_COUNT, CFG_RF_RETRY_COUNT, CFG_UNKNOWN_17,
+    CFG_UNKNOWN_19, CFG_UNKNOWN_1A, CFG_UNKNOWN_1B,
+    NET_NTP_SERVER, NET_UNKNOWN_1C, NET_RF_FREQ_CODE, NET_UNKNOWN_05,
+    NET_PROTOCOL_GUID, NET_LATITUDE, NET_LONGITUDE, NET_LOCATION,
+    NET_UNKNOWN_24, NET_HAS_COLOR, NET_UNKNOWN_28, NET_UNKNOWN_29,
+    NET_DEVICE_GUID, NET_UNKNOWN_2A, NET_DISPLAY_DPI,
+    NET_UNKNOWN_0F_BLK, NET_UNKNOWN_10_BLK,
+    ID_MAC_ADDRESS, ID_SERIAL,
+    SLT_INPUT_SLOT_IDX, SLT_PAGE_GROUP_ID, SLT_GROUP_NAME,
+    SLT_GROUP_STATE, SLT_VARIABLE_NAME, SLT_PAGE_CAP_U2,
+)
 
-_DEVICE_TYPE_U2 = 29    # 0x1d
+_DEVICE_TYPE_U2 = 29    # 0x1D
 _DEVICE_GUID_U2 = bytes.fromhex('374c960428d0da4fab706b46c804cd86')
 _PROTOCOL_GUID  = bytes.fromhex('00000000080000007801030000000001')
 
@@ -206,91 +228,91 @@ def build_u2_base_stream(
     """Build the U2 base device-stream prefix (351 TLV records)."""
     e = []
 
-    # -- Device type and core config --
-    e.append(tlv.encode_byte(1,  _DEVICE_TYPE_U2))  # device type U2 = 0x1d
-    e.append(tlv.encode_byte(3,  10))
-    e.append(tlv.encode_i32(52,  3600))
-    e.append(tlv.encode_byte(4,  0))
-    e.append(tlv.encode_u16(1,   2))
-    e.append(tlv.encode_byte(7,  0))   # 0 for remote (1 = XP processor)
-    e.append(tlv.encode_byte(8,  0))
-    e.append(tlv.encode_byte(38, 2))   # U2/U1 = 2, XP = 0
-    e.append(tlv.encode_byte(39, 0))   # U2/U1 = 0, XP = 1
-    e.append(tlv.encode_byte(11, 1))   # U2 = 1, U1/XP = 0
-    e.append(tlv.encode_byte(12, 0))
-    e.append(tlv.encode_byte(45, 1))
-    e.append(tlv.encode_byte(44, 1))
-    e.append(tlv.encode_byte(14, 1))
-    e.append(tlv.encode_byte(15, 0))
-    e.append(tlv.encode_byte(17, 0))
-    e.append(tlv.encode_i32(1,   25000))
-    e.append(tlv.encode_byte(19, 0))
-    e.append(tlv.encode_i32(36,  255))
-    e.append(tlv.encode_i32(4,   100))
-    e.append(tlv.encode_i32(5,   10))
-    e.append(tlv.encode_i32(6,   -1))
-    e.append(tlv.encode_i32(7,   100))
-    e.append(tlv.encode_i32(8,   60))
-    e.append(tlv.encode_i32(9,   30))
-    e.append(tlv.encode_i32(19,  10))
-    e.append(tlv.encode_i32(20,  10))
-    e.append(tlv.encode_i32(21,  10))
-    e.append(tlv.encode_byte(22, 0))
-    e.append(tlv.encode_byte(43, 1))
-    e.append(tlv.encode_i32(10,  80))
-    e.append(tlv.encode_i32(11,  1))
-    e.append(tlv.encode_i32(13,  -1))
-    e.append(tlv.encode_byte(23, 0))
-    e.append(tlv.encode_byte(25, 1))
-    e.append(tlv.encode_byte(26, 1))   # directly follows 25 on U2/U1 (no XP extra block)
-    e.append(tlv.encode_byte(27, 1))
+    # -- Device config (positions 0-36) --
+    e.append(tlv.encode_byte(CFG_DEVICE_TYPE,       _DEVICE_TYPE_U2))  # pos  0
+    e.append(tlv.encode_byte(CFG_POLLING_RATE,       10))               # pos  1
+    e.append(tlv.encode_i32 (CFG_NTP_SYNC_INTERVAL,  3600))             # pos  2
+    e.append(tlv.encode_byte(CFG_UNKNOWN_04,          0))               # pos  3
+    e.append(tlv.encode_u16 (CFG_PROTOCOL_VERSION,    2))               # pos  4
+    e.append(tlv.encode_byte(CFG_IS_PROCESSOR,        0))               # pos  5  0=remote
+    e.append(tlv.encode_byte(CFG_UNKNOWN_08,          0))               # pos  6
+    e.append(tlv.encode_byte(CFG_DEVICE_CATEGORY,     2))               # pos  7  2=handheld
+    e.append(tlv.encode_byte(CFG_UNKNOWN_27,          0))               # pos  8  0=remote
+    e.append(tlv.encode_byte(CFG_HAS_PHYS_BUTTONS,    1))               # pos  9  U2=1 (has buttons)
+    e.append(tlv.encode_byte(CFG_UNKNOWN_0C,          0))               # pos 10
+    e.append(tlv.encode_byte(CFG_UI_VERSION,          1))               # pos 11  1=mono B&W
+    e.append(tlv.encode_byte(CFG_UNKNOWN_2C,          1))               # pos 12
+    e.append(tlv.encode_byte(CFG_UNKNOWN_0E,          1))               # pos 13
+    e.append(tlv.encode_byte(CFG_UNKNOWN_0F_B,        0))               # pos 14
+    e.append(tlv.encode_byte(CFG_UNKNOWN_11,          0))               # pos 15
+    e.append(tlv.encode_i32 (CFG_IDLE_TIMEOUT,        25000))           # pos 16
+    e.append(tlv.encode_byte(CFG_UNKNOWN_13_B,        0))               # pos 17
+    e.append(tlv.encode_i32 (CFG_BACKLIGHT_MAX,       255))             # pos 18
+    e.append(tlv.encode_i32 (CFG_BACKLIGHT_ON,        100))             # pos 19
+    e.append(tlv.encode_i32 (CFG_BACKLIGHT_DIM,       10))              # pos 20
+    e.append(tlv.encode_i32 (CFG_BACKLIGHT_OFF,       -1))              # pos 21
+    e.append(tlv.encode_i32 (CFG_MOTION_ON,           100))             # pos 22
+    e.append(tlv.encode_i32 (CFG_MOTION_DIM,          60))              # pos 23
+    e.append(tlv.encode_i32 (CFG_MOTION_OFF,          30))              # pos 24
+    e.append(tlv.encode_i32 (CFG_KEYCLICK_VOL,        10))              # pos 25
+    e.append(tlv.encode_i32 (CFG_KEYCLICK_ON,         10))              # pos 26
+    e.append(tlv.encode_i32 (CFG_VIBRATION_MS,        10))              # pos 27
+    e.append(tlv.encode_byte(CFG_HAS_TOUCHSCREEN,     0))               # pos 28  U2=0 (no touch)
+    e.append(tlv.encode_byte(CFG_UNKNOWN_2B,          1))               # pos 29
+    e.append(tlv.encode_i32 (CFG_RF_CHANNEL,          80))              # pos 30
+    e.append(tlv.encode_i32 (CFG_RF_CHANNEL_COUNT,    1))               # pos 31
+    e.append(tlv.encode_i32 (CFG_RF_RETRY_COUNT,      -1))              # pos 32
+    e.append(tlv.encode_byte(CFG_UNKNOWN_17,          0))               # pos 33
+    e.append(tlv.encode_byte(CFG_UNKNOWN_19,          1))               # pos 34
+    e.append(tlv.encode_byte(CFG_UNKNOWN_1A,          1))               # pos 35
+    e.append(tlv.encode_byte(CFG_UNKNOWN_1B,          1))               # pos 36
 
-    # -- Network / location --
-    e.append(tlv.encode_varstr_raw(10, ntp_server.encode('utf-16-le')))
-    e.append(tlv.encode_byte(28, 1))
-    e.append(tlv.encode_i32(22,  8))
-    e.append(tlv.encode_u16(5,   0))
-    e.append(tlv.encode_guid(2,  _PROTOCOL_GUID))
-    e.append(tlv.encode_blob(8,  b'\x00' * 8))   # latitude  (cleared)
-    e.append(tlv.encode_blob(9,  b'\x00' * 8))   # longitude (cleared)
-    e.append(tlv.encode_varstr_raw(13, location.encode('utf-16-le')))
-    e.append(tlv.encode_byte(36, 0))
-    e.append(tlv.encode_byte(37, 0))   # 0 for U2/U1 (1 = XP)
-    e.append(tlv.encode_byte(40, 0))
-    e.append(tlv.encode_byte(41, 3))
-    e.append(tlv.encode_blob(13, _DEVICE_GUID_U2))
-    e.append(tlv.encode_byte(42, 0))
-    e.append(tlv.encode_i32(48,  96))  # 96 for U2 (0 for XP/U1)
-    e.append(tlv.encode_blob(15, b'\x00' * 8))
-    e.append(tlv.encode_blob(16, b'\x00' * 8))
+    # -- Network / location (positions 37-53) --
+    e.append(tlv.encode_varstr_raw(NET_NTP_SERVER,    ntp_server.encode('utf-16-le')))  # pos 37
+    e.append(tlv.encode_byte(NET_UNKNOWN_1C,          1))               # pos 38
+    e.append(tlv.encode_i32 (NET_RF_FREQ_CODE,        8))               # pos 39
+    e.append(tlv.encode_u16 (NET_UNKNOWN_05,          0))               # pos 40
+    e.append(tlv.encode_guid(NET_PROTOCOL_GUID,       _PROTOCOL_GUID))  # pos 41
+    e.append(tlv.encode_blob(NET_LATITUDE,            b'\x00' * 8))     # pos 42
+    e.append(tlv.encode_blob(NET_LONGITUDE,           b'\x00' * 8))     # pos 43
+    e.append(tlv.encode_varstr_raw(NET_LOCATION,      location.encode('utf-16-le')))  # pos 44
+    e.append(tlv.encode_byte(NET_UNKNOWN_24,          0))               # pos 45
+    e.append(tlv.encode_byte(NET_HAS_COLOR,           0))               # pos 46  U2=0 (mono)
+    e.append(tlv.encode_byte(NET_UNKNOWN_28,          0))               # pos 47
+    e.append(tlv.encode_byte(NET_UNKNOWN_29,          3))               # pos 48
+    e.append(tlv.encode_blob(NET_DEVICE_GUID,         _DEVICE_GUID_U2)) # pos 49
+    e.append(tlv.encode_byte(NET_UNKNOWN_2A,          0))               # pos 50
+    e.append(tlv.encode_i32 (NET_DISPLAY_DPI,         96))              # pos 51  U2=96
+    e.append(tlv.encode_blob(NET_UNKNOWN_0F_BLK,      b'\x00' * 8))     # pos 52
+    e.append(tlv.encode_blob(NET_UNKNOWN_10_BLK,      b'\x00' * 8))     # pos 53
 
-    # -- Identity --
-    e.append(tlv.encode_varstr_raw(31, device_mac.encode('utf-16-le')))
-    e.append(tlv.encode_blob(3, b'0000'))
+    # -- Device identity (positions 54-55) --
+    e.append(tlv.encode_varstr_raw(ID_MAC_ADDRESS,    device_mac.encode('utf-16-le')))  # pos 54
+    e.append(tlv.encode_blob(ID_SERIAL,               b'0000'))         # pos 55
 
-    # -- Input slot indices (9 slots: 256-264) --
+    # -- Input slot indices (positions 56-64, 9 slots: 256-264) --
     for idx in range(256, 265):
-        e.append(tlv.encode_u16(4, idx))
+        e.append(tlv.encode_u16(SLT_INPUT_SLOT_IDX, idx))
 
-    # -- Page group IDs (4 groups) --
+    # -- Page group IDs (positions 65-68, 4 groups) --
     for grp in range(4):
-        e.append(tlv.encode_i32(29, grp << 24))
+        e.append(tlv.encode_i32(SLT_PAGE_GROUP_ID, grp << 24))
 
-    # -- Input group slot names (16, all empty for U2) --
+    # -- Input group slot names (positions 69-84, 16 slots; all empty for U2) --
     for idx in range(16):
-        e.append(tlv.encode_varstr_raw(8, struct.pack('<H', idx)))
+        e.append(tlv.encode_varstr_raw(SLT_GROUP_NAME, struct.pack('<H', idx)))
 
-    # -- Input group state blobs (8) --
+    # -- Input group state blobs (positions 85-92, 8 blobs) --
     for idx in range(8):
-        e.append(tlv.encode_blob(12, struct.pack('<I', idx) + b'\xff\xff\xff\xff'))
+        e.append(tlv.encode_blob(SLT_GROUP_STATE, struct.pack('<I', idx) + b'\xff\xff\xff\xff'))
 
-    # -- Variable slots: 256 "Unnamed" entries --
+    # -- Variable slots (positions 93-348, 256 × 'Unnamed') --
     unnamed = 'Unnamed'.encode('utf-16-le')
     for idx in range(256):
-        e.append(tlv.encode_varstr_raw(9, struct.pack('<H', idx) + unnamed))
+        e.append(tlv.encode_varstr_raw(SLT_VARIABLE_NAME, struct.pack('<H', idx) + unnamed))
 
-    # -- Page capabilities sentinel (required before home page) --
-    e.append(tlv.encode_blob(6, bytes.fromhex('2e00ffffffff0700')))
+    # -- Page capabilities sentinel (position 349) --
+    e.append(tlv.encode_blob(SLT_PAGE_CAP_U2, bytes.fromhex('2e00ffffffff0700')))
 
     # -- Home page --
     e.append(_home_page_container())

@@ -41,13 +41,28 @@ devices/
 project/
     project.py      RTIProject (assembles streams, writes .rti)
     metadata.py     Job Info, VariableIDs, RTI Data Directory V3
+
+devices/t2i/
+    remote.py       T2iRemote (240×320 colour touchscreen)
+    stream_profile.py T2i base stream builder + image encoder
+    image.py        load_image_rgb() — load any image as T2i background
+
+tools/
+    stream_diff.py  Universal stream diff / inspect tool for reverse engineering
 """
 
 # ---- public surface ------------------------------------------------------
-from .project.project  import RTIProject
-from .devices.xp       import XPProcessor, Macro
-from .devices.u1       import U1Remote
-from .devices.u2       import U2Remote
-from .devices.u2.bml   import BMLFile
+from rti_lib.project.project  import RTIProject
+from rti_lib.devices.xp       import XPProcessor, Macro
+from rti_lib.devices.u1       import U1Remote
+from rti_lib.devices.u2       import U2Remote
+from rti_lib.devices.u2.bml   import BMLFile
+from rti_lib.devices.t2i      import T2iRemote, load_image_rgb
+from rti_lib.tools            import diff_files, print_stream
 
-__all__ = ['RTIProject', 'XPProcessor', 'Macro', 'U1Remote', 'U2Remote', 'BMLFile']
+__all__ = [
+    'RTIProject', 'XPProcessor', 'Macro',
+    'U1Remote', 'U2Remote', 'BMLFile',
+    'T2iRemote', 'load_image_rgb',
+    'diff_files', 'print_stream',
+]

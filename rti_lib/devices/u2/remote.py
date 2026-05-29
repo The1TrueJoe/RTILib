@@ -19,10 +19,10 @@ Typical usage::
 
 from dataclasses import dataclass
 from typing import List, Optional
-from ...core import tlv
-from ..common import encode_global_button_group
-from .encoders import encode_u2_hardware_button, encode_u2_shortcut_cell
-from .stream_profile import build_u2_base_stream
+from rti_lib.core import tlv
+from rti_lib.devices.common import encode_global_button_group
+from rti_lib.devices.u2.encoders import encode_u2_hardware_button, encode_u2_shortcut_cell
+from rti_lib.devices.u2.stream_profile import build_u2_base_stream
 
 
 @dataclass

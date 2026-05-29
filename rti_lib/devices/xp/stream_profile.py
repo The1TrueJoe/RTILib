@@ -12,7 +12,7 @@ Structure (397 TLV records, ~6633 bytes):
 """
 
 import struct
-from ...core import tlv
+from rti_lib.core import tlv
 
 _DEVICE_TYPE_XP = 49   # 0x31
 _DEVICE_GUID_XP = bytes.fromhex('7ede5b2bcffa6646b73e7ccdd79850e4')

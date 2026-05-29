@@ -223,3 +223,8 @@ def load(path: str) -> CFBParser:
     with open(path, 'rb') as f:
         data = f.read()
     return CFBParser(data)
+
+
+def load_bytes(data: bytes) -> CFBParser:
+    """Load a CFB file from raw bytes and return a CFBParser instance."""
+    return CFBParser(data)

@@ -13,7 +13,7 @@ XP macros consist of:
 Wire-format reference: rti_lib/core/tlv.py
 """
 
-from ...core import tlv
+from rti_lib.core import tlv
 
 # ---- 7-byte device-protocol hashes (observed in Test2/Test3.rti) --------
 # These identify the communication protocol used for a command.
@@ -194,7 +194,7 @@ def encode_macro_group(inner_macros: list, group_name: str = '') -> bytes:
     inner_macros : list of bytes from encode_inner_macro()
     group_name   : optional group label (usually empty string)
     """
-    from ..common import _encode_group_header
+    from rti_lib.devices.common import _encode_group_header
     content = (
         _encode_group_header(group_name) +
         b''.join(inner_macros) +
@@ -211,5 +211,5 @@ def encode_empty_macro_group() -> bytes:
     primary macro group in XP streams.  The contents are just the group
     header + terminator (no macros).
     """
-    from ..common import _encode_group_header
+    from rti_lib.devices.common import _encode_group_header
     return tlv.encode_container(0x02, _encode_group_header() + tlv.TERMINATOR)

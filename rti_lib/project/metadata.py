@@ -28,8 +28,8 @@ Three streams appear in every .rti file alongside the device data:
 
 import struct
 import time as _time
-from ..devices.common import encode_profile
-from ..core import tlv
+from rti_lib.devices.common import encode_profile
+from rti_lib.core import tlv
 
 JOB_INFO_PROFILE = [('varstr_raw', 20, ''),
  ('varstr_raw', 21, ''),
