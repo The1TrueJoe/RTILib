@@ -124,7 +124,7 @@ m_blue   = macro('Blue',   b'color blue\r')
 # ---------------------------------------------------------------------------
 # T2i Remote
 # ---------------------------------------------------------------------------
-t2i = T2iRemote(display_name=REMOTE_NAME)
+t2i = T2iRemote(display_name=REMOTE_NAME, style=Style.OASIS)
 
 # Background: Oasis navy→teal ambient gradient (uses ButtonDesigner)
 t2i.set_background(ButtonDesigner.background(Style.OASIS))
@@ -237,5 +237,5 @@ proj.add_device(t2i)
 
 out_path = os.path.join(os.path.dirname(__file__), 'out_basic_t2i.rti')
 size = proj.save(out_path)
-print(f'Saved {size:,} bytes → {os.path.basename(out_path)}')
+print(f'Saved {size:,} bytes -> {os.path.basename(out_path)}')
 print('Open out_basic_t2i.rti in RTI Integration Designer to verify.')

@@ -30,7 +30,7 @@ Button CONT inner content (150 bytes):
   I32  tag=01 = 254          type sentinel (hardware-button style)
   I32  tag=02 = index        button index (128-179)
   I32  tag=03 = 0
-  BYTE tag=02 = 0xFF         unconfigured flag (always 0xFF on T2i)
+  BYTE tag=02 = 0x00|0xFF    0x00=configured (has label/macro), 0xFF=unconfigured
   BYTE tag=03 = 0
   BYTE tag=04 = 0
   BYTE tag=05 = 0
@@ -70,9 +70,33 @@ Label/macro container (TAG=01 CONTAINER, appended when a button is configured):
   FF FF
 """
 
+import io
 import struct
 import zlib
+from PIL import Image, ImageEnhance
 from rti_lib.core import tlv
+from rti_lib.devices.t2i.stream_profile import _encode_t2i_image_inner
+
+# ---------------------------------------------------------------------------
+# Button-image encoder
+# ---------------------------------------------------------------------------
+
+def encode_t2i_button_image(tag: int, rgb_bytes: bytes, w: int, h: int) -> bytes:
+    """
+    Encode a button state image as CONT(tag).
+
+    Used to embed normal-state (tag=0x04) and pressed-state (tag=0x05) images
+    inside a screen button CONT.  The image data uses the same encoding as
+    page background images but with BMP 4-byte row-stride alignment.
+
+    Parameters
+    ----------
+    tag      : 0x04 for normal state, 0x05 for pressed state.
+    rgb_bytes: Raw RGB pixel data (width × height × 3 bytes), top-to-bottom.
+    w, h     : Image dimensions (must match the button's touch-region size).
+    """
+    return tlv.encode_container(tag, _encode_t2i_image_inner(rgb_bytes, w, h))
+
 
 # ---- constants ------------------------------------------------------------
 
@@ -126,13 +150,14 @@ def encode_t2i_label_container(label: str,
     return tlv.encode_container(0x01, content)
 
 
-def _encode_t2i_button_base(index: int, label: str = '') -> bytes:
+def _encode_t2i_button_base(index: int, label: str = '',
+                           configured: bool = False) -> bytes:
     """Encode the 17-field common base shared with U2 hardware buttons."""
     return (
         tlv.encode_i32(0x01, 254) +
         tlv.encode_i32(0x02, index) +
         tlv.encode_i32(0x03, 0) +
-        tlv.encode_byte(0x02, 0xFF) +   # always 0xFF on T2i
+        tlv.encode_byte(0x02, 0x00 if configured else 0xFF) +  # 0x00=configured, 0xFF=unconfigured
         tlv.encode_byte(0x03, 0) +
         tlv.encode_byte(0x04, 0) +
         tlv.encode_byte(0x05, 0) +
@@ -208,23 +233,118 @@ def encode_t2i_button(index: int,
                       x: int = 0, y: int = 0,
                       w: int = 0, h: int = 0) -> bytes:
     """
-    Encode a configured T2i button with an optional label, macro, and touch region.
+    Encode a hardware-slot T2i button (sentinel=254, slot 128-179) with a macro.
 
-    When ``label`` or ``macro_seq_num`` is provided the label/macro container
-    is appended after the base fields, making the CONT larger than a plain stub.
+    Used for physical hardware buttons that have a global macro assigned
+    (e.g. Vol+, Guide).  Screen-visible touch buttons use
+    ``encode_t2i_screen_button`` instead.
 
     Parameters
     ----------
-    index         : button slot index (128-179)
-    label         : action label displayed on press (e.g. 'Watch TV')
-    macro_seq_num : XP macro sequence number to invoke on tap, or None
-    x, y          : top-left pixel position of the touch region (0 = unset)
-    w, h          : pixel dimensions of the touch region (0 = unset)
+    index         : hardware slot index (128-179)
+    label         : label used in Integration Designer
+    macro_seq_num : XP macro sequence number to invoke, or None
+    x, y          : touch region top-left (0 = unset)
+    w, h          : touch region dimensions (0 = unset)
     """
+    is_configured = bool(label or macro_seq_num is not None)
     content = (
-        _encode_t2i_button_base(index, label=label) +
+        _encode_t2i_button_base(index, label=label, configured=is_configured) +
         _encode_t2i_touch_fields(index, x, y, w, h)
     )
+    if is_configured:
+        content += encode_t2i_label_container(label or '', macro_seq_num)
+    content += tlv.TERMINATOR
+    return tlv.encode_container(0x01, content)
+
+
+def encode_t2i_screen_button(x: int, y: int, w: int, h: int,
+                              label: str = '',
+                              macro_seq_num: int = None,
+                              image_rgb: bytes = None,
+                              pressed_rgb: bytes = None) -> bytes:
+    """
+    Encode a T2i on-screen touch button (type sentinel = 0).
+
+    Screen buttons are the visible, tappable tiles rendered on the T2i
+    display.  They differ from hardware button stubs (sentinel=254, slots
+    128-179) in two key ways:
+
+    * The type sentinel in I32(01) is ``0`` (not ``254``).
+    * Position and size are packed into I32(02)/(I32(03)) as::
+
+          I32(02) = (x << 16) | y    — top-left pixel coordinate
+          I32(03) = (h << 16) | w    — pixel dimensions
+
+    Integration Designer renders the embedded chip images (CONT tag=04 normal
+    state, CONT tag=05 pressed state) as the button visual.  Without those
+    images the button face is transparent.
+
+    Parameters
+    ----------
+    x, y          : Top-left pixel coordinate of the touch region.
+    w, h          : Pixel dimensions of the touch region.
+    label         : Display label shown in Integration Designer (may be empty).
+    macro_seq_num : XP macro sequence number to invoke on tap, or None.
+    image_rgb     : Optional raw RGB bytes (w×h×3) for the normal state chip image.
+    pressed_rgb   : Optional raw RGB bytes (w×h×3) for the pressed state chip image.
+                    Defaults to a darkened version of image_rgb when omitted.
+    """
+    packed_pos  = ((x & 0xFFFF) << 16) | (y & 0xFFFF)
+    packed_size = ((h & 0xFFFF) << 16) | (w & 0xFFFF)
+
+    # Colour values observed in Test4.rti.  High byte is alpha (0x00=transparent,
+    # 0xFF=opaque).  Face is transparent so the embedded chip image shows through.
+    _FACE    =  16711680   # 0x00FF0000 — transparent face (chip image drawn instead)
+    _BORDER  = -16777216   # 0xFF000000 — opaque black border
+    _TEXT    =  16777215   # 0x00FFFFFF — white text
+
+    content = (
+        tlv.encode_i32(0x01, 0) +            # type sentinel (0 = screen button)
+        tlv.encode_i32(0x02, packed_pos) +   # packed (x<<16)|y position
+        tlv.encode_i32(0x03, packed_size) +  # packed (h<<16)|w size
+        tlv.encode_byte(0x02, 0xFF) +        # configured flag (always 0xFF for screen buttons)
+        tlv.encode_byte(0x03, 0) +
+        tlv.encode_byte(0x04, 0) +
+        tlv.encode_byte(0x05, 0) +
+        tlv.encode_byte(0x06, 0) +
+        tlv.encode_i32(0x0E, -1) +
+        tlv.encode_byte(0x0E, 1) +
+        tlv.encode_varstr(0x04, '') +        # label field (text goes in label CONT below)
+        tlv.encode_i32(0x04, 0) +            # bitmap index (0 = no embedded BML icon)
+        tlv.encode_byte(0x07, 2) +
+        tlv.encode_byte(0x08, 0) +
+        tlv.encode_byte(0x09, 0) +
+        tlv.encode_i32(0x0C, 10) +
+        tlv.encode_i32(0x0D, 0) +
+        tlv.encode_i32(0x10, packed_pos) +   # touch slot ID (mirrors I32(02))
+        tlv.encode_i32(0x11, packed_size) +  # touch size (mirrors I32(03))
+        tlv.encode_byte(0x0F, 3) +
+        tlv.encode_i32(0x05, _FACE) +
+        tlv.encode_i32(0x06, _BORDER) +
+        tlv.encode_i32(0x07, _FACE) +
+        tlv.encode_i32(0x08, _FACE) +
+        tlv.encode_i32(0x09, _BORDER) +
+        tlv.encode_i32(0x0A, _TEXT) +
+        tlv.encode_byte(0x0D, 0) +           # 0 for screen buttons (1 for hw stubs)
+        tlv.encode_byte(0x0A, 0) +
+        tlv.encode_byte(0x0B, 0) +
+        tlv.encode_byte(0x0C, 0) +
+        tlv.encode_i32(0x0B, 0)
+        # CONT(04) normal image, CONT(05) pressed image, I32(0F)=-1, label CONT
+        # are appended below in the order observed in Test4.rti.
+    )
+
+    # Embed chip images (normal and pressed states).
+    if image_rgb is not None:
+        if pressed_rgb is None:
+            # Auto-generate a 75%-brightness pressed state from the normal image.
+            img = Image.frombytes('RGB', (w, h), image_rgb)
+            pressed_rgb = ImageEnhance.Brightness(img).enhance(0.75).tobytes()
+        content += encode_t2i_button_image(0x04, image_rgb, w, h)
+        content += encode_t2i_button_image(0x05, pressed_rgb, w, h)
+
+    content += tlv.encode_i32(0x0F, -1)
     if label or macro_seq_num is not None:
         content += encode_t2i_label_container(label or '', macro_seq_num)
     content += tlv.TERMINATOR

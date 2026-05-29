@@ -144,6 +144,10 @@ except AttributeError:
 draw.text(((W - tw) // 2, (HDR_H - th) // 2), title,
           font=font_hdr, fill=(160, 220, 230))
 
+# Capture the clean background (gradient + header only, no chip overlays).
+# This is what the T2i device uses — chips come from the embedded button CONTs.
+clean_bg_rgb = bg.tobytes()
+
 # ---------------------------------------------------------------------------
 # Source button chips (icon + label, composited onto the background)
 # ---------------------------------------------------------------------------
@@ -155,13 +159,11 @@ for col, row, label, lib, icon_name in SOURCES:
     cx = GAP + col * (SRC_CHIP_W + GAP)
     cy = SRC_Y0 + GAP + row * (SRC_CHIP_H + GAP)
 
-    src_button_rects[label] = (cx, cy, SRC_CHIP_W, SRC_CHIP_H)
-
     # Load icon PNG from the library (silently skip on KeyError)
     try:
         icon_png = lib.get_png(icon_name)
     except KeyError as e:
-        print(f'  WARNING: icon not found — {e}')
+        print(f'  WARNING: icon not found - {e}')
         icon_png = None
 
     # Generate the chip PNG (RGBA with rounded corners)
@@ -176,7 +178,10 @@ for col, row, label, lib, icon_name in SOURCES:
     # Alpha-composite the chip onto the background
     chip_img = Image.open(io.BytesIO(chip_png)).convert('RGBA')
     bg.paste(chip_img, (cx, cy), mask=chip_img.split()[3])
-    print(f'  Source chip: {label:12s} at ({cx},{cy}) {SRC_CHIP_W}×{SRC_CHIP_H}')
+    # Store flat RGB bytes for embedding in the RTI button CONT.
+    chip_rgb = chip_img.convert('RGB').tobytes()
+    src_button_rects[label] = (cx, cy, SRC_CHIP_W, SRC_CHIP_H, chip_rgb)
+    print(f'  Source chip: {label:12s} at ({cx},{cy}) {SRC_CHIP_W}x{SRC_CHIP_H}')
 
 # ---------------------------------------------------------------------------
 # Transport strip (ASCII label chips at the bottom)
@@ -185,7 +190,6 @@ trn_button_rects: dict = {}
 
 for i, (symbol, name) in enumerate(TRANSPORT):
     tx = GAP + i * (TRN_CHIP_W + GAP)
-    trn_button_rects[name] = (tx, TRN_Y0, TRN_CHIP_W, TRN_H)
 
     chip_png = ButtonDesigner.button_chip(
         TRN_CHIP_W, TRN_H,
@@ -195,7 +199,9 @@ for i, (symbol, name) in enumerate(TRANSPORT):
     )
     chip_img = Image.open(io.BytesIO(chip_png)).convert('RGBA')
     bg.paste(chip_img, (tx, TRN_Y0), mask=chip_img.split()[3])
-    print(f'  Transport:   {name:8s} [{symbol}] at ({tx},{TRN_Y0}) {TRN_CHIP_W}×{TRN_H}')
+    chip_rgb = chip_img.convert('RGB').tobytes()
+    trn_button_rects[name] = (tx, TRN_Y0, TRN_CHIP_W, TRN_H, chip_rgb)
+    print(f'  RTI transport:  {name:8s} @ ({tx},{TRN_Y0}) {TRN_CHIP_W}x{TRN_H}')
 
 # ---------------------------------------------------------------------------
 # Save preview PNG
@@ -204,8 +210,10 @@ preview_path = os.path.join(os.path.dirname(__file__), 'out_oasis_home.png')
 bg.save(preview_path)
 print(f'\nPreview saved: {preview_path}')
 
-# Convert to raw RGB bytes for the T2i encoder
-bg_rgb = bg.tobytes()
+# Use the CLEAN background (no chips) for the RTI device so Integration
+# Designer does not show a second copy of every button underneath the
+# interactive screen button CONTs.
+bg_rgb = clean_bg_rgb
 
 # ---------------------------------------------------------------------------
 # XP Processor — one macro per user action
@@ -296,8 +304,9 @@ src_macro_map = {
     'Streaming':  m_stream,
     'Power Off':  m_alloff,
 }
-for label, (x, y, w, h) in src_button_rects.items():
-    t2i.add_source_button(label, macro=src_macro_map[label], x=x, y=y, w=w, h=h)
+for label, (x, y, w, h, chip_rgb) in src_button_rects.items():
+    t2i.add_source_button(label, macro=src_macro_map[label],
+                          x=x, y=y, w=w, h=h, image_rgb=chip_rgb)
     print(f'  RTI source btn: {label} @ ({x},{y}) {w}×{h}')
 
 # --- Touchscreen transport buttons ---
@@ -308,9 +317,10 @@ trn_macro_map = {
     'Next':  m_next,
     'Stop':  m_stop,
 }
-for name, (x, y, w, h) in trn_button_rects.items():
-    t2i.add_source_button(name, macro=trn_macro_map[name], x=x, y=y, w=w, h=h)
-    print(f'  RTI transport:  {name} @ ({x},{y}) {w}×{h}')
+for name, (x, y, w, h, chip_rgb) in trn_button_rects.items():
+    t2i.add_source_button(name, macro=trn_macro_map[name],
+                          x=x, y=y, w=w, h=h, image_rgb=chip_rgb)
+    print(f'  RTI transport:  {name} @ ({x},{y}) {w}x{h}')
 
 # --- Physical hardware button macros (all 52 slots 128-179) ---
 #

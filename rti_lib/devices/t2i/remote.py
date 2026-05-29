@@ -38,7 +38,7 @@ from typing import Dict, List, Optional, Tuple
 
 from rti_lib.devices.t2i.stream_profile import build_t2i_base_stream, T2I_WIDTH, T2I_HEIGHT
 from rti_lib.devices.t2i.encoders import (
-    encode_t2i_button_stub, encode_t2i_button,
+    encode_t2i_button_stub, encode_t2i_button, encode_t2i_screen_button,
     T2I_BUTTON_COUNT, T2I_BUTTON_BASE,
 )
 
@@ -47,12 +47,13 @@ from rti_lib.devices.t2i.encoders import (
 class _T2iButton:
     """Internal representation of one configured T2i button."""
     index:     int
-    label:     str       = ''
-    macro:     object    = None   # Macro | None
+    label:     str    = ''
+    macro:     object = None   # Macro | None
     x: int = 0
     y: int = 0
     w: int = 0
     h: int = 0
+    image_rgb: bytes  = None   # Pre-rendered chip RGB bytes (w×h×3), or None for auto
 
 
 class T2iRemote:
@@ -100,8 +101,19 @@ class T2iRemote:
         (177, 'Btn A'), (178, 'Btn B'), (179, 'Btn C'),
     ]
 
-    def __init__(self, display_name: str = 'T2i'):
+    def __init__(self, display_name: str = 'T2i', style=None):
+        """
+        Parameters
+        ----------
+        display_name : Name shown in the RTI project browser.
+        style        : Optional ``StyleDef`` from ``rti_lib.assets.button_designer``.
+                       When set, chip images are automatically generated for
+                       each screen button that has w and h > 0.  Users can
+                       also supply pre-rendered ``image_rgb`` bytes per button
+                       to override auto-generation (e.g. for icon chips).
+        """
         self.display_name             = display_name
+        self._style                   = style
         self._image_rgb: Optional[bytes] = None
         self._home_btns: Dict[int, _T2iButton] = {}
         self._sec_btns:  Dict[int, _T2iButton] = {}
@@ -145,7 +157,8 @@ class T2iRemote:
     def assign_button(self, index: int, label: str = '',
                       macro=None,
                       x: int = 0, y: int = 0,
-                      w: int = 0, h: int = 0) -> None:
+                      w: int = 0, h: int = 0,
+                      image_rgb: bytes = None) -> None:
         """
         Assign a label and/or macro to a home-page button slot by index.
 
@@ -158,11 +171,13 @@ class T2iRemote:
         w, h   : Touch region pixel dimensions (0 = unset).
         """
         self._home_btns[index] = _T2iButton(
-            index=index, label=label, macro=macro, x=x, y=y, w=w, h=h)
+            index=index, label=label, macro=macro, x=x, y=y, w=w, h=h,
+            image_rgb=image_rgb)
 
     def add_source_button(self, label: str, macro=None,
                           x: int = 0, y: int = 0,
-                          w: int = 0, h: int = 0) -> int:
+                          w: int = 0, h: int = 0,
+                          image_rgb: bytes = None) -> int:
         """
         Add a source button to the next available home-page slot.
 
@@ -183,7 +198,8 @@ class T2iRemote:
             self._next_home += 1
         idx = self._next_home
         self._next_home += 1
-        self.assign_button(idx, label=label, macro=macro, x=x, y=y, w=w, h=h)
+        self.assign_button(idx, label=label, macro=macro, x=x, y=y, w=w, h=h,
+                           image_rgb=image_rgb)
         return idx
 
     # ---- secondary page buttons ---------------------------------------------
@@ -191,7 +207,8 @@ class T2iRemote:
     def assign_secondary_button(self, index: int, label: str = '',
                                 macro=None,
                                 x: int = 0, y: int = 0,
-                                w: int = 0, h: int = 0) -> None:
+                                w: int = 0, h: int = 0,
+                                image_rgb: bytes = None) -> None:
         """
         Assign a label and/or macro to a secondary-page button slot by index.
 
@@ -203,11 +220,13 @@ class T2iRemote:
         x, y, w, h : Touch region in pixels (0 = unset).
         """
         self._sec_btns[index] = _T2iButton(
-            index=index, label=label, macro=macro, x=x, y=y, w=w, h=h)
+            index=index, label=label, macro=macro, x=x, y=y, w=w, h=h,
+            image_rgb=image_rgb)
 
     def add_secondary_button(self, label: str, macro=None,
                              x: int = 0, y: int = 0,
-                             w: int = 0, h: int = 0) -> int:
+                             w: int = 0, h: int = 0,
+                             image_rgb: bytes = None) -> int:
         """
         Add a button to the next available secondary-page slot.
 
@@ -218,7 +237,8 @@ class T2iRemote:
         idx = self._next_sec
         self._next_sec += 1
         self.assign_secondary_button(idx, label=label, macro=macro,
-                                     x=x, y=y, w=w, h=h)
+                                     x=x, y=y, w=w, h=h,
+                                     image_rgb=image_rgb)
         return idx
 
     @classmethod
@@ -246,24 +266,29 @@ class T2iRemote:
 
     def _build_page_buttons(self, assigned: Dict[int, _T2iButton]) -> bytes:
         """
-        Build all 52 button CONT records for one page.
+        Build all button CONT records for one page.
 
-        Priority order for each slot:
-          1. Page-specific button (from assign_button / add_source_button)
-          2. Global hardware button macro (from assign_hw_button_macro)
-          3. Empty stub (slot unassigned)
+        Two distinct button types are written to the same page CONTAINER:
+
+        1. **Hardware button stubs** (sentinel=254, indices 128-179) — always
+           written for all 52 T2i hardware slots.  Slots that have a global
+           hardware macro assigned (via ``assign_hw_button_macro``) are written
+           with that macro; all others are empty stubs.
+
+        2. **Screen buttons** (sentinel=0) — one per entry in ``assigned``,
+           appended after the hardware stubs.  These are the visible, tappable
+           tiles on the T2i display.
+
+           If the remote was created with a ``style`` and the button has
+           non-zero w/h, chip images are auto-generated unless the button
+           already carries pre-rendered ``image_rgb`` bytes.
         """
+        import io
         parts = []
+
+        # --- 52 hardware button stubs (slots 128-179) ---
         for idx in range(T2I_BUTTON_BASE, T2I_BUTTON_BASE + T2I_BUTTON_COUNT):
-            if idx in assigned:
-                b = assigned[idx]
-                parts.append(encode_t2i_button(
-                    idx,
-                    label=b.label,
-                    macro_seq_num=b.macro.seq_num if b.macro else None,
-                    x=b.x, y=b.y, w=b.w, h=b.h,
-                ))
-            elif idx in self._hw_button_macros:
+            if idx in self._hw_button_macros:
                 m = self._hw_button_macros[idx]
                 lbl = self._hw_button_labels.get(idx, '')
                 parts.append(encode_t2i_button(
@@ -273,6 +298,28 @@ class T2iRemote:
                 ))
             else:
                 parts.append(encode_t2i_button_stub(idx))
+
+        # --- Screen buttons (visible tiles on the touchscreen display) ---
+        for b in assigned.values():
+            image_rgb = b.image_rgb
+            if image_rgb is None and self._style is not None and b.w > 0 and b.h > 0:
+                # Auto-generate a chip using ButtonDesigner.
+                from rti_lib.assets.button_designer import ButtonDesigner
+                from PIL import Image
+                font_size = max(8, min(14, b.h // 6))
+                chip_png  = ButtonDesigner.button_chip(
+                    b.w, b.h, label=b.label,
+                    style=self._style, font_size=font_size,
+                )
+                img = Image.open(io.BytesIO(chip_png)).convert('RGB')
+                image_rgb = img.tobytes()
+            parts.append(encode_t2i_screen_button(
+                x=b.x, y=b.y, w=b.w, h=b.h,
+                label=b.label,
+                macro_seq_num=b.macro.seq_num if b.macro else None,
+                image_rgb=image_rgb,
+            ))
+
         return b''.join(parts)
 
     def _build_global_buttons(self) -> list:

@@ -81,6 +81,22 @@ def encode_t2i_image(rgb_bytes: bytes, width: int = T2I_WIDTH,
     -------
     bytes — The encoded CONTAINER (tag=0x02) ready to embed in a page CONT.
     """
+    return tlv.encode_container(0x02, _encode_t2i_image_inner(rgb_bytes, width, height))
+
+
+def _encode_t2i_image_inner(rgb_bytes: bytes, width: int = T2I_WIDTH,
+                             height: int = T2I_HEIGHT) -> bytes:
+    """
+    Core T2i image encoder — returns the raw inner bytes of an image CONT.
+
+    Shared by ``encode_t2i_image`` (page background, tag=02) and button-image
+    encoding (tag=04 normal state, tag=05 pressed state).
+
+    Pixel data is stored bottom-up BGR with BMP 4-byte row-stride alignment
+    (stride = ceil(width*3/4)*4).  For 240-pixel-wide backgrounds the stride
+    is already 720 (divisible by 4), so existing background encoding is
+    unchanged.
+    """
     expected = width * height * 3
     if len(rgb_bytes) != expected:
         raise ValueError(
@@ -88,10 +104,11 @@ def encode_t2i_image(rgb_bytes: bytes, width: int = T2I_WIDTH,
             f'got {len(rgb_bytes)}'
         )
 
-    total_pixels = width * height
+    # BMP 4-byte row-stride alignment.
+    # For width=240: stride=720 (no padding — same as before).
+    stride = ((width * 3 + 3) // 4) * 4
 
-    # BITMAPINFOHEADER (40 bytes, BI_RGB uncompressed; height is positive =
-    # bottom-up, but RTI stores top-down so we set it as positive regardless).
+    # BITMAPINFOHEADER (40 bytes, BI_RGB uncompressed).
     bih = struct.pack('<IIiHHIIiiII',
         40,           # biSize
         width,        # biWidth
@@ -99,18 +116,17 @@ def encode_t2i_image(rgb_bytes: bytes, width: int = T2I_WIDTH,
         1,            # biPlanes
         24,           # biBitCount
         0,            # biCompression (BI_RGB)
-        0,            # biSizeImage (can be 0 for BI_RGB)
+        0,            # biSizeImage (0 = derived from stride*height)
         0, 0,         # biXPelsPerMeter, biYPelsPerMeter
         0, 0,         # biClrUsed, biClrImportant
     )
 
-    # Convert top-to-bottom RGB to bottom-to-top BGR (Windows BMP convention).
-    # biHeight is positive (bottom-up), so row 0 of the image is stored last.
+    # Convert top-to-bottom RGB to bottom-to-top BGR with BMP row stride.
     w3 = width * 3
     bgr_rows = []
     for row_i in range(height - 1, -1, -1):  # reversed: bottom row first
         src = rgb_bytes[row_i * w3:(row_i + 1) * w3]
-        row_bgr = bytearray(w3)
+        row_bgr = bytearray(stride)           # zero-padded to stride bytes
         for px in range(width):
             row_bgr[px * 3]     = src[px * 3 + 2]  # B
             row_bgr[px * 3 + 1] = src[px * 3 + 1]  # G
@@ -118,52 +134,26 @@ def encode_t2i_image(rgb_bytes: bytes, width: int = T2I_WIDTH,
         bgr_rows.append(bytes(row_bgr))
     pixel_data = b''.join(bgr_rows)
 
-    # Compress the pixel data.
-    compressed = zlib.compress(pixel_data, level=1)
-    comp_size  = len(compressed)          # zlib stream size (incl. header+checksum)
-    uncomp_size = total_pixels * 3        # raw byte count
+    compressed  = zlib.compress(pixel_data, level=1)
+    comp_size   = len(compressed)
+    uncomp_size = stride * height       # includes row padding
 
-    # Build the 8-byte image hash.
-    # hash[0:4] = CRC32(BGR bottom-up pixels) stored little-endian.
-    # hash[4:8] = unknown second half; set to zero (RTI may not validate it).
-    crc_px = binascii.crc32(pixel_data) & 0xFFFFFFFF
+    crc_px     = binascii.crc32(pixel_data) & 0xFFFFFFFF
     image_hash = struct.pack('<I', crc_px) + b'\x00' * 4
 
-    # Assemble image CONT inner content:
-    #   I32(tag=1)  = total uncompressed bytes
-    #   I32(tag=2)  = -1 (observed constant)
-    #   BLOB(tag=1) = 8-byte image hash
-    #   VARSTR(tag=1) = BITMAPINFOHEADER (44 bytes; actual BIH is 40 bytes but
-    #                   RTI pads with 4 zeros matching imageSize field placement)
-    #   [marker bytes tag=01 type=E0]: 4B uncompressed_size, 4B compressed_size,
-    #                                  then 8B of zlib stream start  (16B "GUID")
-    #   [remainder of zlib stream appended after the GUID]
-    #
-    # The "GUID" node is a deliberate misuse: the RTI format stores:
-    #   01 E0 [4B unc_sz] [4B comp_sz] [8B zlib_head] [rest of zlib]
-    # where the zlib stream begins at the 8th byte of the 16-byte GUID value
-    # and continues beyond the node boundary until the end of the CONT raw.
-
-    varstr_raw = bih + b'\x00' * 4   # BITMAPINFOHEADER padded to 44 bytes
+    varstr_raw = bih + b'\x00' * 4     # BITMAPINFOHEADER padded to 44 bytes
     inner  = tlv.encode_i32(0x01, uncomp_size)
     inner += tlv.encode_i32(0x02, -1)
     inner += tlv.encode_blob(0x01, image_hash)
     inner += tlv.encode_varstr_raw(0x01, varstr_raw)
 
-    # Write the fake GUID sentinel: tag=01, type=E0, then 16 bytes where
-    # the first 8 encode sizes and the last 8 start the zlib stream.
     guid_data = (struct.pack('<I', uncomp_size) +
-                 struct.pack('<I', comp_size) +      # full zlib stream length
+                 struct.pack('<I', comp_size) +
                  compressed[:8])
     inner += bytes([0x01, 0xE0]) + guid_data
-
-    # Append the rest of the zlib stream (bytes 8 onward).
     inner += compressed[8:]
-
-    # Terminate the image CONT inner content (required by RTI's TLV decoder).
     inner += b'\xFF\xFF'
-
-    return tlv.encode_container(0x02, inner)
+    return inner
 
 
 # ---------------------------------------------------------------------------
